@@ -11,8 +11,8 @@ def get_cache_key(captcha_key):
 
 
 def random_char_challenge(length):
-    chars = 'abcdefghijklmnopqrstuvwxyz'
-    ret = ''
+    chars = "abcdefghijklmnopqrstuvwxyz"
+    ret = ""
     for i in range(length):
         ret += random.choice(chars)
     return ret.upper()
@@ -23,8 +23,10 @@ def filter_smooth(image, filter_code):
 
 
 def noise_dots(draw, image, fill):
+    """Reduce noise dots by lowering the density."""
     size = image.size
-    for p in range(int(size[0] * size[1] * 0.1)):
+    dot_count = int(size[0] * size[1] * 0.02)  # Reduce density to 2% of image area
+    for p in range(dot_count):
         x = random.randint(0, size[0])
         y = random.randint(0, size[1])
         draw.point((x, y), fill=fill)
@@ -32,8 +34,36 @@ def noise_dots(draw, image, fill):
 
 
 def noise_arcs(draw, image, fill):
+    """Reduce noise arcs and lines for less obtrusiveness."""
     size = image.size
-    draw.arc([-20, -20, size[0], 20], 0, 295, fill=fill)
-    draw.line([-20, 20, size[0] + 20, size[1] - 20], fill=fill)
-    draw.line([-20, 0, size[0] + 20, size[1]], fill=fill)
+    # Draw fewer arcs and lines, ensuring they are not too centered or distracting
+    draw.arc(
+        [
+            random.randint(-50, -10),
+            random.randint(-50, -10),
+            random.randint(size[0] - 10, size[0] + 10),
+            random.randint(size[1] - 10, size[1] + 10),
+        ],
+        random.randint(0, 45),
+        random.randint(135, 295),
+        fill=fill,
+    )
+    draw.line(
+        [
+            random.randint(-20, -10),
+            random.randint(0, size[1]),
+            random.randint(size[0] - 10, size[0]),
+            random.randint(size[1] - 20, size[1] + 10),
+        ],
+        fill=fill,
+    )
+    draw.line(
+        [
+            random.randint(-20, -10),
+            random.randint(0, size[1]),
+            random.randint(size[0] - 10, size[0]),
+            random.randint(size[1] - 20, size[1] + 10),
+        ],
+        fill=fill,
+    )
     return draw

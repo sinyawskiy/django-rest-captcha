@@ -14,7 +14,7 @@ def filter_default(image):
 
 
 def noise_default(image, draw):
-    """Add noise to the image."""
+    """Add noise to the image without obstructing readability."""
     draw = utils.noise_dots(draw, image, settings.CAPTCHA_FOREGROUND_COLOR)
     draw = utils.noise_arcs(draw, image, settings.CAPTCHA_FOREGROUND_COLOR)
 
@@ -22,12 +22,9 @@ def noise_default(image, draw):
 def getsize(font, text):
     """Get the bounding box width and height for the given text with the specified font."""
     bbox = font.getbbox(text)
-    if hasattr(font, "getlength"):
-        # Convert length to an integer and use it as the width
-        width = int(font.getlength(text))
-        height = bbox[3] - bbox[1]  # Height is calculated from bounding box
-        return (width, height)
-    return (bbox[2] - bbox[0], bbox[3] - bbox[1])
+    width = bbox[2] - bbox[0]  # Width from bounding box
+    height = bbox[3] - bbox[1] + 15  # Height from bounding box
+    return width, height
 
 
 def makeimg(size):
@@ -38,52 +35,65 @@ def makeimg(size):
 
 
 def generate_image(word):
-    """Generate a CAPTCHA image for the provided word."""
+    """Generate a CAPTCHA image for the provided word with improved readability."""
     font = FONT
     size = settings.CAPTCHA_IMAGE_SIZE
-    xpos = 2
-    from_top = 4
+    xpos = 20  # Start with a larger horizontal padding to avoid cropping
+    from_top = 10  # Start with a larger top margin
 
     # Initialize the base image
     image = makeimg(size)
 
+    # Determine the total width required for the word (with padding) and the height of the characters
+    total_width = 0
+    total_height = 0
+    char_images = []
     for char in word:
-        # Create foreground and character images
-        fgimage = Image.new("RGB", size, settings.CAPTCHA_FOREGROUND_COLOR)
         charimage = Image.new("L", getsize(font, f" {char} "), "#000000")
         chardraw = ImageDraw.Draw(charimage)
         chardraw.text((0, 0), f" {char} ", font=font, fill="#ffffff")
 
-        # Apply random rotation if enabled
+        # Apply subtle random rotation for readability
         if settings.CAPTCHA_LETTER_ROTATION:
-            angle = random.randrange(*settings.CAPTCHA_LETTER_ROTATION)
+            angle = random.uniform(-10, 10)  # Limited rotation for better readability
             charimage = charimage.rotate(angle, expand=False, resample=Image.BICUBIC)
 
         charimage = charimage.crop(charimage.getbbox())  # Crop to actual character size
+        char_images.append(charimage)
+        total_width += charimage.size[0] + 10  # Add some spacing between characters
+        total_height = max(
+            total_height, charimage.size[1]
+        )  # Track the max character height
+
+    # Resize the image to accommodate all characters with space around them
+    image_width = max(
+        total_width, size[0]
+    )  # Ensure the image width is at least the specified width
+    image_height = max(
+        total_height + 20, size[1]
+    )  # Ensure the image height is large enough
+    image = makeimg((image_width, image_height))
+
+    xpos = (image_width - total_width) // 2  # Center the characters horizontally
+
+    for charimage in char_images:
+        # Create foreground and character images
+        fgimage = Image.new(
+            "RGB", (image_width, image_height), settings.CAPTCHA_FOREGROUND_COLOR
+        )
+        maskimage = Image.new("L", (image_width, image_height))
 
         # Position the character in the final image
-        maskimage = Image.new("L", size)
-        xpos2 = xpos + charimage.size[0]
-        from_top2 = from_top + charimage.size[1]
-        maskimage.paste(charimage, (xpos, from_top, xpos2, from_top2))
-
+        maskimage.paste(charimage, (xpos, from_top))
         image = Image.composite(fgimage, image, maskimage)
-        xpos += 2 + charimage.size[0]
-
-    # Center CAPTCHA if specified
-    if settings.CAPTCHA_IMAGE_SIZE:
-        tmpimg = makeimg(size)
-        xpos2 = int((size[0] - xpos) / 2)
-        from_top2 = int((size[1] - charimage.size[1]) / 2 - from_top)
-        tmpimg.paste(image, (xpos2, from_top2))
-        image = tmpimg.crop((0, 0, size[0], size[1]))
-    else:
-        image = image.crop((0, 0, xpos + 1, size[1]))
+        xpos += (
+            charimage.size[0] + 10
+        )  # Move xpos forward by character width and spacing
 
     # Draw any additional elements and apply filters/noise
     draw = ImageDraw.Draw(image)
-    settings.FILTER_FUNCTION(image)
-    settings.NOISE_FUNCTION(image, draw)
+    settings.FILTER_FUNCTION(image)  # Apply smoother filter
+    settings.NOISE_FUNCTION(image, draw)  # Apply noise
 
     # Save image to a BytesIO buffer in PNG format
     out = BytesIO()
@@ -91,4 +101,3 @@ def generate_image(word):
     content = out.getvalue()
 
     return content
-
